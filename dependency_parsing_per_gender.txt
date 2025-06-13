@@ -1,0 +1,84 @@
+import spacy, pickle
+from spacy.matcher import DependencyMatcher
+from utils import prepare_text, file2doc
+from bs4 import BeautifulSoup
+import codecs, os
+from utils import prepare_text
+from collections import Counter
+
+nlp = spacy.load("en_core_web_lg")
+
+pattern = [
+  {
+    "RIGHT_ID": "target",
+    "RIGHT_ATTRS": {"POS": "NOUN"}
+  },
+  # founded -> subject
+  {
+    "LEFT_ID": "target",
+    "REL_OP": ">",
+    "RIGHT_ID": "modifier",
+    "RIGHT_ATTRS": {"DEP": {"IN": ["amod", "nummod"]}}
+  },
+]
+
+matcher = DependencyMatcher(nlp.vocab)
+matcher.add("FOUNDED", [pattern])
+
+ct=0
+tot=len(os.listdir('pgs'))
+
+import time
+ld=False
+while not ld:
+    try:
+        info = pickle.load(open('haves.p','rb'))
+        ld=True
+    except Exception as err:
+        time.sleep(1)
+print('Total', len(info))
+
+deps={}
+rezzy=pickle.load(open('rezzy.p','rb'))
+for s in os.listdir('pgs'):
+    ct+=1
+    if ct % 100 == True:
+        print(ct/1000, tot, 'reading')
+
+    try:
+        try:
+            mook= rezzy[s]
+        except KeyError:
+            pagename, gend, profname, wdid, typ = info[s.replace('.html','')]
+
+            text = file2doc("pgs/%s"% s,True)
+            doc = nlp(text)
+            mook={'m':[], 'f': []}
+            for match_id, (target, modifier) in matcher(doc):
+                mod=str(doc[modifier])
+                tar=str(doc[target])
+                if not mod.isnumeric():
+                    try:
+                        deps[tar]
+                    except KeyError:
+                        deps[tar] = {'m':[], 'f': []}
+                    try:
+                        deps[tar][gend].append(mod)
+                    except KeyError:
+                        deps[tar][gend] = [mod]
+                    try:
+                        mook[gend].append(mod)
+                    except KeyError:
+                        mook[gend] = [mod]
+            rezzy[s] = mook
+            deps[tar] = mook
+        except UnicodeDecodeError:
+            continue
+    except KeyError:
+        pass
+pickle.dump(rezzy, open('rezzy.p','wb'))
+for k,v in deps.items():
+    if not v['f'] == []:
+        v['m']=Counter(v['m'])
+        v['f']=Counter(v['f'])
+        print([k,v])

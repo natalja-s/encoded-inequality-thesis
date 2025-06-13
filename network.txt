@@ -1,0 +1,84 @@
+import os, codecs, pickle, csv
+from bs4 import BeautifulSoup
+import requests,json
+import networkx as nx
+
+# PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+# PREFIX wd: <http://www.wikidata.org/entity/>
+# #PREFIX wikibase: <http://wikiba.se/ontology#>
+# #PREFIX bd: <http://www.bigdata.com/rdf#>
+# PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+# PREFIX schema: <http://schema.org/>
+ # SELECT distinct ?prof ?article
+ # WHERE 
+ # {
+     # ?item wdt:P106 ?prof .
+	 # ?item wdt:P31 wd:Q5 .
+        # ?article schema:about ?item .
+        # ?article schema:isPartOf <https://en.wikipedia.org/> .
+
+# } group by ?prof ?article
+
+
+with codecs.open('P106_Q5_w_names.csv', 'r', encoding='utf-8') as f:
+    r=csv.DictReader(f)
+    for row in r:
+        Qprof = row['prof'].replace('http://www.wikidata.org/entity/','')
+        prof2name[Qprof] = row['article'].replace('https://en.wikipedia.org','')
+with codecs.open('P39_Q5_w_names.csv', 'r', encoding='utf-8') as f:
+    r=csv.DictReader(f)
+    for row in r:
+        Qprof = row['prof'].replace('http://www.wikidata.org/entity/','')
+        prof2name[Qprof] = row['article'].replace('https://en.wikipedia.org','')
+
+ct=0
+mf={}
+info = pickle.load(open('haves.p','rb'))
+linx={}
+tot=len(os.listdir('pgs'))/1000
+for s in os.listdir('pgs'):
+    ct+=1
+    if ct % 100 == True:
+        print(ct/1000, tot)
+    try:
+        pagename, gend, profname, wdid, typ = info[s.replace('.html','')]
+    except KeyError:
+        continue
+    with codecs.open('pgs/%s'%s, 'r', encoding='utf-8') as f:
+        dta=f.read()
+    soup = BeautifulSoup(dta, 'html.parser')
+    for a in soup.findAll('a'):
+        h = a.get('href')
+        if not h is None:
+            # print(h, list(prof2name.keys())[:3])
+            try:
+                prof2name[h]
+                # print(gend, h)
+                try:
+                    linx[h]
+                except KeyError:
+                    linx[h] = {'m':0, 'f':0}
+                try:
+                    linx[h][gend]+=1
+                except KeyError:
+                    linx[h][gend]=1
+            except KeyError:
+                pass
+            # h=h.split('#')[0]
+            # if not h is None and h.strip():
+                # # print(sex, h)
+                # try:
+                    # mf[h]
+                # except KeyError:
+                    # mf[h]={}
+                # try:
+                    # mf[h][sex]+=1
+                # except KeyError:
+                    # mf[h][sex]=1]
+G=nx.DiGraph()
+for link, v in linx.items():
+
+    for qk, qv in v.items():
+        
+        G.add_edge(qk, link, weight=qv)
+nx.write_gexf(G, 'linx_new.gexf')

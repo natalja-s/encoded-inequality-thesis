@@ -1,0 +1,174 @@
+# SELECT ?item ?prof
+# WHERE 
+# {
+    # ?item wdt:P39 ?prof .
+   
+# } 
+import json, requests, csv, codecs, html, os, pickle
+from pywikibot import textlib
+from pywikibot import pagegenerators
+import pywikibot, sys
+from random import randint, shuffle
+from bs4 import BeautifulSoup
+from urllib.parse import unquote
+
+
+class wikiDataPedia:
+    repo=None
+    generator=None
+    profs={}
+
+    def __init__(self):
+        site = pywikibot.Site("wikidata", "wikidata")
+        self.repo = site.data_repository()
+
+
+    def getResults(self):
+        alls=[]
+        P_NUMBER='P106'
+        P_NUMBER='P39'
+        dta = json.loads(open(P_NUMBER+'_distinct.json','r', encoding='utf-8').read())
+        shuffle(dta)
+        l=P_NUMBER
+        try:
+            dones=pickle.load(open('done_ones.p','wb'))
+        except Exception:
+            dones=[]
+        cttt=0
+        for gend in ['Q6581072','Q6581097']:
+            tot=len(dta)
+            for d in dta:
+                cttt+=1
+                print(cttt/1000, len(dta)/1000, gend)
+                d=d['prof'].split('/')[-1]
+                if d == 'Q1650915':
+                    continue
+                tuppy = (gend, d)
+                if tuppy in dones:
+                    continue
+                try:#this is missing a check for 'human'
+                    qq="""
+                        SELECT ?item ?gender ?prof
+                        WHERE
+                        {
+                            ?item wdt:P106 wd:?ppprof .
+                            ?item wdt:P106 ?prof .
+                            ?item wdt:P21 ?gender .
+                            ?item wdt:P21 wd:?gggender .
+                            ?article schema:about ?item .
+                            ?article schema:isPartOf <https://en.wikipedia.org/> .
+                        } """
+                    # print(qq)
+                    qq=qq.replace('?ppprof', d)
+                    qq=qq.replace('?gggender', gend)
+                    qq=qq.replace('P106', P_NUMBER)
+                    # print(qq)
+
+                    # wikipediasite = pywikibot.Site('wikipedia:en')
+                    self.generator = pagegenerators.PreloadingEntityGenerator(pagegenerators.WikidataSPARQLPageGenerator(qq,site=self.repo))
+                    # l = "%s_%s" % (gend, d)
+                    alls+= self.parseResults(l,tot)
+                    dones.append(tuppy)
+                    pickle.dump(dones, open('done_ones.p','wb'))
+                except Exception as err:
+                    print('ERR', err)
+        return alls
+
+    def parseResults(self, typ,tot):
+        out=[]
+        ct=0
+        try:
+            # haves=pickle.load(open('%s.p'%typ.replace(':','_'),'rb'))
+            haves=pickle.load(open('haves.p','rb'))
+        except Exception:
+            haves={}
+    
+        for item in self.generator:
+            ct+=1
+            if ct % 10 == True:
+                try:
+                    haves2=pickle.load(open('haves.p','rb'))
+                    for qk , qv in haves2.items():
+                        haves[qk] = qv
+                    del haves2
+                except Exception:
+                    pass
+                pickle.dump(haves, open('haves.p','wb'))
+            
+            item_dict = item.get()
+            lid=item.id
+            try:
+                haves[lid]
+                if os.path.isfile('pgs/%s.html'% lid):
+                    continue
+            except KeyError:
+                pass
+            u='https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks/urls&ids=%s&sitefilter=enwiki' % lid
+            res = requests.get(u)
+            j = json.loads(res.content)
+            
+            wp_url = j['entities'][lid]['sitelinks']['enwiki']['url']
+            clm_dict = item_dict["claims"]
+            for x in clm_dict['P21']:
+                gend=x.getTarget()
+                if str(gend) == '[[wikidata:Q6581097]]':
+                    gend='m'
+                elif str(gend) == '[[wikidata:Q6581072]]':
+                    gend='f'
+                else:
+                    print("WTF")
+                    raise Exception
+            for x in clm_dict[typ.replace('wdt:','')]:
+                tar=str(x.getTarget())
+                wdid=str(tar.replace('[[wikidata:','').replace(']]',''))
+                try:
+                    profname = self.profs[wdid]
+                except KeyError:
+                    profitem = pywikibot.ItemPage(self.repo, wdid)
+                    try:
+                        profname = profitem.text['labels']['en']
+                    except KeyError:#for some reason, items without English labels are appearing
+                        for qqq in profitem.text['labels']:
+                            profname = profitem.text['labels'][qqq]
+                    self.profs[wdid]=profname
+            pagename = unquote(wp_url.replace('https://en.wikipedia.org/wiki/',''))
+            if not os.path.isfile('pgs/%s.html'% lid):
+                response = requests.get(
+                    'https://en.wikipedia.org/w/api.php',
+                    params={
+                        'action': 'parse',
+                        'page': pagename,
+                        'format': 'json',
+                    }
+                    ).json()
+                try:
+                    raw_html = response['parse']['text']['*']
+                except Exception as err:
+                    print('RESP', response)
+                    raise
+
+                with codecs.open('pgs/%s.html'% lid, 'w', encoding='utf-8') as f:
+                    f.write(raw_html)
+            print(ct/1000, tot/1000, len(haves)/ 1000, typ, wp_url.replace('https://en.wikipedia.org/wiki/',''))
+
+            out.append([lid, pagename, gend, profname, wdid, typ])
+            haves[lid] = [pagename, gend, profname, wdid, typ]
+        pickle.dump(haves, open('haves.p','wb'))
+        if randint(0,10) == 2:
+            pickle.dump(haves, open('haves_bu.p','wb'))
+        return out
+
+if __name__ == '__main__':
+    try:
+        dic = pickle.load(open('results.p','rb'))
+    except Exception as er:
+        dic={}
+
+    w= wikiDataPedia()
+    res=w.getResults()
+    for x in res:
+        dic[x[0]] = x[1:]
+    pickle.dump(dic, open('results.p','wb'))
+    if randint(0,5) == 2:
+        pickle.dump(dic, open('results_bu.p','wb'))
+    
