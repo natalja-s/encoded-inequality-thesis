@@ -1,1 +1,1 @@
-# encoded-inequality-thesis
+# Encoded-Inequality-Thesis
