@@ -43,21 +43,26 @@ Temporal comparison of responses from ChatGPT (2024 vs 2025)
 Step 1: Corpus Construction & Filtering
 Run download_wikidatapedia.py to query Wikidata and collect gender-labeled Wikipedia biographies with known professions (P106/P39).
 Use a Wikipedia dump to extract article content, creating a balanced corpus of ~696,000 articles (50/50 male-female).
+
 Step 2: Lexicon Expansion via Word2Vec
 Use similaradjectives_word2vec.py to expand a seed list of culturally gendered adjectives based on semantic similarity.
 Word2Vec embeddings trained on Wikipedia ensure interpretability and historical relevance.
+
 Step 3: Adjective Extraction (Dependency Parsing)
 Use dependency_parsing_per_gender.py (based on spaCy en_core_web_lg) to parse all biographies.
 Extract all adjectives (not limited to noun-adjective pairs), grouped by the subject's gender.
+
 Step 4: Frequency Filtering
 Run find_bias_adjectives_only.py to:
 Filter adjectives based on a curated list (adjectives_list.txt)
 Count each adjective once per article (to avoid repetition bias)
 Output frequency tables by gender to bias_adjectives_only.csv
+
 Step 5: Manual Validation
 Use a structured 6-point rubric to manually filter for gender-relevant descriptors (e.g., emotional, behavioral, evaluative).
 Exclude technical, filler, and nationality-based adjectives.
 Final lists: ~300 adjectives per gender.
+
 Step 6: Computational Analysis
 Analyze and visualize using the following:
 Log-ratio comparison for frequency differences.
